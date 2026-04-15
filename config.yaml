@@ -1,0 +1,332 @@
+esphome:
+  name: ai-vox3-va
+
+esp32:
+  board: esp32-s3-devkitc1-n16r8
+  flash_size: 16MB
+  cpu_frequency: 240MHz
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: "y"
+      CONFIG_ESP32S3_DATA_CACHE_64KB: "y"
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: "y"
+psram:
+  mode: octal
+  speed: 80MHz
+
+# Enable logging
+logger:
+  level: DEBUG
+  baud_rate: 115200
+  hardware_uart: USB_SERIAL_JTAG
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "fys9ZsGHp/yDFTiwkTbaPD7l2L15ghhalLOqvGhi9mU="
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: "emakefun-01"
+  password: "123456789"
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  # ap:
+  #   ssid: "My-Va Fallback Hotspot"
+  #   password: "g4idAbrz0CHX"
+
+captive_portal:
+
+light:
+  - platform: esp32_rmt_led_strip
+    rgb_order: GRB
+    pin: GPIO41
+    num_leds: 1
+    chipset: WS2812
+    id: main_light
+
+  - platform: monochromatic
+    output: gpio16
+    id: backlight
+    name: "LCD Backlight"
+
+i2c:
+  scl: GPIO12
+  sda: GPIO13
+
+audio_dac:
+  - platform: es8311
+    id: es8311_codec
+    bits_per_sample: 16bit
+    sample_rate: 16000
+    use_mclk: true
+    use_microphone: false
+    mic_gain: 6DB
+
+i2s_audio:
+  - id: i2s_audio_bus
+    i2s_lrclk_pin: GPIO8
+    i2s_bclk_pin: GPIO10
+    i2s_mclk_pin: GPIO11
+
+speaker:
+  - platform: i2s_audio
+    id: external_speaker
+    i2s_audio_id: i2s_audio_bus
+    i2s_dout_pin: GPIO7
+    dac_type: external
+    sample_rate: 16000
+    bits_per_sample: 16bit
+    channel: left
+    audio_dac: es8311_codec
+
+microphone:
+  - platform: i2s_audio
+    i2s_audio_id: i2s_audio_bus
+    id: external_mic
+    adc_type: external
+    sample_rate: 16000
+    bits_per_sample: 16bit
+    channel: left
+    i2s_din_pin: GPIO9
+    correct_dc_offset: true
+    use_apll: true
+    pdm: false
+
+# i2s_audio:
+#   - id: pdm_mic_i2s_bus
+#     i2s_lrclk_pin: GPIO4
+
+#   - id: speaker_i2s_bus
+#     i2s_lrclk_pin: GPIO6
+#     i2s_bclk_pin: GPIO7
+
+# speaker:
+#   - platform: i2s_audio
+#     id: external_speaker
+#     dac_type: external
+#     i2s_dout_pin: GPIO15
+#     sample_rate: 16000
+#     i2s_audio_id: speaker_i2s_bus
+#     channel: left
+
+# microphone:
+#   - platform: i2s_audio
+#     id: external_mic
+#     adc_type: external
+#     i2s_din_pin: GPIO5
+#     pdm: true
+#     bits_per_sample: 16bit
+#     sample_rate: 16000
+#     i2s_audio_id: pdm_mic_i2s_bus
+#     channel: left
+#     correct_dc_offset: true
+#     use_apll: true
+
+# micro_wake_word:
+#   id: mww
+#   microphone:
+#     microphone: external_mic
+#     channels: 0
+#     gain_factor: 1
+#   vad:
+#   models:
+#     - okay_nabu
+#     - hey_mycroft
+#     - hey_jarvis
+#   on_wake_word_detected:
+#     - lambda: printf("on wake word detected\n");
+#     - voice_assistant.start:
+#         wake_word: !lambda return wake_word;
+#     - light.addressable_set:
+#         id: main_light
+#         red: 0%
+#         green: 0%
+#         blue: 10%
+
+voice_assistant:
+  id: va
+  # micro_wake_word: mww
+  # use_wake_word: true
+  microphone: external_mic
+  speaker: external_speaker
+  noise_suppression_level: 2
+  auto_gain: 31dBFS
+  volume_multiplier: 2.0
+  on_start:
+    then:
+      - lambda: |-
+          printf("Voice assistant started\n");
+  on_end:
+    then:
+      - lambda: |-
+          printf("Voice assistant stopped\n");
+  on_intent_start:
+    then:
+      - lambda: |-
+          printf("Voice assistant intent started\n");
+  on_intent_end:
+    then:
+      - lambda: |-
+          printf("Voice assistant intent ended\n");
+      # - if:
+      #     condition:
+      #       - lambda: |-
+      #           return id(wake_word_engine_location).current_option() == "On device";
+      #     then:
+      #       - wait_until:
+      #           - and:
+      #               - not:
+      #                   voice_assistant.is_running:
+      #               - not:
+      #                   speaker.is_playing:
+      #       - lambda: id(va).set_use_wake_word(false);
+      #       - micro_wake_word.start:
+  on_listening:
+    then:
+      - lambda: |-
+          printf("Voice assistant listening\n");
+  on_stt_end:
+    then:
+      - lambda: |-
+          printf("Voice assistant STT ended\n");
+  on_stt_vad_start:
+    then:
+      - lambda: |-
+          printf("Voice assistant STT VAD started\n");
+  on_stt_vad_end:
+    then:
+      - lambda: |-
+          printf("Voice assistant STT VAD ended\n");
+  on_tts_start:
+    then:
+      - lambda: |-
+          printf("Voice assistant TTS started\n");
+  on_tts_end:
+    then:
+      - lambda: |-
+          printf("Voice assistant TTS ended\n");
+  on_client_connected:
+    then:
+      - lambda: |-
+          printf("Voice assistant client connected\n");
+  on_client_disconnected:
+    then:
+      - lambda: |-
+          printf("Voice assistant client disconnected\n");
+
+# binary_sensor:
+#   - platform: gpio
+#     id: button
+#     pin: GPIO34
+#     filters:
+#       - invert:
+#     on_click:
+#       - lambda: printf("Button clicked\n");
+#       - if:
+#           condition: voice_assistant.is_running
+#           then:
+#             - voice_assistant.stop:
+#             - lambda: printf("Voice assistant stopped\n");
+#           else:
+#             - voice_assistant.start_continuous:
+#             - lambda: printf("Voice assistant started\n");
+
+binary_sensor:
+  - platform: gpio
+    id: button
+    pin: GPIO0
+    filters:
+      - invert:
+    on_click:
+      - if:
+          condition: voice_assistant.is_running
+          then:
+            - lambda: printf("Voice assistant stopped\n");
+            - light.addressable_set:
+                id: main_light
+                red: 0%
+                green: 0%
+                blue: 0%
+            - voice_assistant.stop:
+          else:
+            - lambda: printf("Voice assistant started\n");
+            - light.addressable_set:
+                id: main_light
+                red: 0%
+                green: 50%
+                blue: 0%
+            - voice_assistant.start_continuous:
+            # - micro_wake_word.start:
+    # on_press:
+    #   - light.addressable_set:
+    #       id: main_light
+    #       red: 0%
+    #       green: 50%
+    #       blue: 0%
+    #   - lambda: printf("Button pressed\n");
+    #   - voice_assistant.start_continuous:
+    #   # - microphone.capture: external_mic
+
+    # on_release:
+    #   - light.addressable_set:
+    #       id: main_light
+    #       red: 0%
+    #       green: 0%
+    #       blue: 0%
+    #   - lambda: printf("Button released\n");
+    #   - voice_assistant.stop:
+    # - microphone.stop_capture: external_mic
+
+    # - speaker.mute_off:
+    #     id: external_speaker
+    # - speaker.volume_set: 100%
+    # - speaker.play:
+    #     id: external_speaker
+    #     data: !lambda return kPcmData;
+    # - speaker.finish:
+    #     id: external_speaker
+    # on_press:
+    #   - voice_assistant.start_continuous:
+    #   - lambda: printf("Voice assistant start continuous\n");
+    # on_release:
+    #   - voice_assistant.stop:
+    #   - lambda: printf("Voice assistant stopped\n");
+
+spi:
+  clk_pin: GPIO17
+  mosi_pin: GPIO21
+
+output:
+  - platform: ledc
+    pin: GPIO16
+    id: gpio16
+
+display:
+  - platform: mipi_spi
+    model: CUSTOM
+    bus_mode: single
+    dc_pin: GPIO14
+    cs_pin: GPIO15
+    color_order: BGR
+    dimensions:
+      height: 240
+      width: 240
+      offset_width: 0
+      offset_height: 0
+    invert_colors: true
+    # rotation: 
+    transform:
+      swap_xy: false
+      mirror_x: false
+      mirror_y: false
+    # color_depth: 16
+    pixel_mode: 16bit
+    buffer_size: 100%
+    spi_mode: MODE3
+    init_sequence:
+    # lambda: |-
+    #   it.line(0, 0, 50, 50);
+    show_test_card: true
