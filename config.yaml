@@ -1,0 +1,497 @@
+---
+substitutions:
+  name: ai-vox3
+  friendly_name: AI VOX3
+  loading_illustration_file: https://github.com/nulllaborg/ai-vox3_home_assistant_voice_assistant/raw/main/icons/loading_240x240.png
+  idle_illustration_file: https://github.com/nulllaborg/ai-vox3_home_assistant_voice_assistant/raw/main/icons/idle_240x240.png
+  listening_illustration_file: https://github.com/nulllaborg/ai-vox3_home_assistant_voice_assistant/raw/main/icons/listening_240x240.png
+  thinking_illustration_file: https://github.com/nulllaborg/ai-vox3_home_assistant_voice_assistant/raw/main/icons/thinking_240x240.png
+  replying_illustration_file: https://github.com/nulllaborg/ai-vox3_home_assistant_voice_assistant/raw/main/icons/talking_240x240.png
+  error_illustration_file: https://github.com/nulllaborg/ai-vox3_home_assistant_voice_assistant/raw/main/icons/error_240x240.png
+  network_connecting_file: https://github.com/nulllaborg/ai-vox3_home_assistant_voice_assistant/raw/main/icons/network_connecting_240x240.png
+  ha_connecting_file: https://github.com/nulllaborg/ai-vox3_home_assistant_voice_assistant/raw/main/icons/smart_home_connecting_240x240.png
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  min_version: 2026.4.0
+  name_add_mac_suffix: true
+  on_boot:
+    - priority: 600
+      then:
+        - light.turn_on:
+            id: signal_light
+            effect: Red strobe
+        - display.page.show: network_connecting_page
+
+esp32:
+  variant: esp32s3
+  flash_size: 16MB
+  cpu_frequency: 240MHz
+  framework:
+    type: esp-idf
+
+psram:
+  mode: octal
+  speed: 80MHz
+  ignore_not_found: false
+
+logger:
+  level: DEBUG
+  baud_rate: 115200
+  hardware_uart: USB_SERIAL_JTAG
+
+api:
+  on_client_connected:
+    - light.turn_on:
+        id: signal_light
+        effect: White strobe
+    - logger.log:
+        format: "Client %s connected to API with IP %s"
+        args: [ "client_info.c_str()", "client_address.c_str()" ]
+        level: DEBUG
+  on_client_disconnected:
+    - logger.log:
+        format: "Client %s disconnected from API with IP %s"
+        args: [ "client_info.c_str()", "client_address.c_str()" ]
+        level: DEBUG
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  on_connect:
+    - display.page.show: ha_connecting_page
+    - light.turn_on:
+        id: signal_light
+        effect: Green strobe
+    - logger.log:
+        format: "Connected to WiFi"
+        level: DEBUG
+  on_disconnect:
+    - display.page.show: network_connecting_page
+    - light.turn_on:
+        id: signal_light
+        effect: Red strobe
+    - micro_wake_word.stop:
+    - voice_assistant.stop:
+    - logger.log:
+        format: "Disconnected from WiFi"
+        level: DEBUG
+
+captive_portal:
+
+light:
+  - platform: esp32_rmt_led_strip
+    rgb_order: GRB
+    pin: GPIO41
+    num_leds: 1
+    chipset: WS2812
+    id: signal_light
+    on_state:
+      - logger.log:
+          format: "Signal light state changed!"
+          level: DEBUG
+    effects:
+      - strobe:
+          name: "Red strobe"
+          colors:
+            - state: true
+              brightness: 20%
+              red: 100%
+              green: 0%
+              blue: 0%
+              duration: 500ms
+            - state: false
+              duration: 500ms
+      - strobe:
+          name: "Green strobe"
+          colors:
+            - state: true
+              brightness: 20%
+              red: 0%
+              green: 100%
+              blue: 0%
+              duration: 500ms
+            - state: false
+              duration: 500ms
+      - strobe:
+          name: "White strobe"
+          colors:
+            - state: true
+              brightness: 20%
+              red: 100%
+              green: 100%
+              blue: 100%
+              duration: 500ms
+            - state: false
+              duration: 500ms
+
+  - platform: monochromatic
+    output: gpio16
+    id: backlight
+    name: "LCD Backlight"
+    restore_mode: ALWAYS_ON
+
+i2c:
+  scl: GPIO12
+  sda: GPIO13
+
+audio_dac:
+  - platform: es8311
+    id: es8311_codec
+    bits_per_sample: 16bit
+    sample_rate: 16000
+    use_mclk: true
+    use_microphone: false
+    mic_gain: 24DB
+
+i2s_audio:
+  - id: i2s_audio_bus
+    i2s_lrclk_pin: GPIO8
+    i2s_bclk_pin: GPIO10
+    i2s_mclk_pin: GPIO11
+
+speaker:
+  - platform: i2s_audio
+    id: external_speaker
+    i2s_audio_id: i2s_audio_bus
+    i2s_dout_pin: GPIO7
+    dac_type: external
+    sample_rate: 16000
+    bits_per_sample: 16bit
+    channel: left
+    audio_dac: es8311_codec
+    buffer_duration: 2000ms
+
+microphone:
+  - platform: i2s_audio
+    i2s_audio_id: i2s_audio_bus
+    id: external_mic
+    adc_type: external
+    sample_rate: 16000
+    bits_per_sample: 16bit
+    channel: left
+    i2s_din_pin: GPIO9
+    correct_dc_offset: true
+    pdm: false
+
+micro_wake_word:
+  id: mww
+  microphone:
+    microphone: external_mic
+    channels: 0
+    gain_factor: 1
+  vad:
+    model: https://github.com/esphome/micro-wake-word-models/raw/main/models/v2/vad.json
+  models:
+    - okay_nabu
+    - hey_mycroft
+    - hey_jarvis
+  on_wake_word_detected:
+    - logger.log:
+        format: "Wake word detected"
+        level: DEBUG
+    - voice_assistant.start:
+        wake_word: !lambda return wake_word;
+
+voice_assistant:
+  id: va
+  micro_wake_word: mww
+  microphone: external_mic
+  speaker: external_speaker
+  noise_suppression_level: 2
+  auto_gain: 15dBFS
+  volume_multiplier: 1.5
+  on_end:
+    - if:
+        condition:
+          - lambda: |-
+              return id(wake_word_engine_location).current_option() == "On device";
+        then:
+          - wait_until:
+              - and:
+                  - not:
+                      - voice_assistant.is_running:
+                  - speaker.is_stopped:
+          - lambda: id(va).set_use_wake_word(false);
+          - display.page.show: idle_page
+          - light.turn_on:
+              id: signal_light
+              brightness: 20%
+              red: 100%
+              green: 100%
+              blue: 100%
+              effect: none
+          - micro_wake_word.start:
+  on_intent_start:
+    - display.page.show: state_thinking_page
+    - light.turn_on:
+        id: signal_light
+        brightness: 20%
+        red: 0%
+        green: 100%
+        blue: 100%
+        effect: none
+    - logger.log:
+        format: "Voice assistant intent started"
+        level: DEBUG
+  on_intent_end:
+    - logger.log:
+        format: "Voice assistant intent ended"
+        level: DEBUG
+  on_listening:
+    - display.page.show: state_listening_page
+    - light.turn_on:
+        id: signal_light
+        brightness: 20%
+        red: 100%
+        green: 0%
+        blue: 100%
+        effect: none
+    - logger.log:
+        format: "Voice assistant listening"
+        level: DEBUG
+  on_stt_end:
+    - logger.log:
+        format: "Voice assistant STT ended"
+        level: DEBUG
+  on_stt_vad_start:
+    - logger.log:
+        format: "Voice assistant STT VAD started"
+        level: DEBUG
+  on_stt_vad_end:
+    - logger.log:
+        format: "Voice assistant STT VAD ended"
+        level: DEBUG
+  on_tts_start:
+    - logger.log:
+        format: "Voice assistant TTS started"
+        level: DEBUG
+  on_tts_end:
+    - logger.log:
+        format: "Voice assistant TTS ended"
+        level: DEBUG
+  on_client_connected:
+    - display.page.show: idle_page
+    - light.turn_on:
+        id: signal_light
+        brightness: 20%
+        red: 100%
+        green: 100%
+        blue: 100%
+        effect: none
+    - script.execute: start_wake_word
+    - logger.log:
+        format: "Voice assistant client connected"
+        level: DEBUG
+  on_client_disconnected:
+    - script.execute: stop_wake_word
+    - logger.log:
+        format: "Voice assistant client disconnected"
+        level: DEBUG
+  on_tts_stream_start:
+    - display.page.show: state_replying_page
+    - light.turn_on:
+        id: signal_light
+        brightness: 20%
+        red: 100%
+        green: 100%
+        blue: 0%
+        effect: none
+    - logger.log:
+        format: "Voice assistant TTS stream started"
+        level: DEBUG
+  on_idle:
+    - wait_until:
+        speaker.is_stopped:
+    - display.page.show: idle_page
+    - light.turn_on:
+        id: signal_light
+        brightness: 20%
+        red: 100%
+        green: 100%
+        blue: 100%
+        effect: none
+    - logger.log:
+        format: "Voice assistant idle"
+        level: DEBUG
+  on_error:
+    - if:
+        condition:
+          lambda: "return code != \"duplicate_wake_up_detected\";"
+        then:
+image:
+  - file: ${error_illustration_file}
+    id: state_error
+    resize: 240x240
+    type: RGB
+    transparency: alpha_channel
+  - file: ${idle_illustration_file}
+    id: state_idle
+    resize: 240x240
+    type: RGB
+    transparency: alpha_channel
+  - file: ${listening_illustration_file}
+    id: state_listening
+    resize: 240x240
+    type: RGB
+    transparency: alpha_channel
+  - file: ${thinking_illustration_file}
+    id: state_thinking
+    resize: 240x240
+    type: RGB
+    transparency: alpha_channel
+  - file: ${replying_illustration_file}
+    id: state_replying
+    resize: 240x240
+    type: RGB
+    transparency: alpha_channel
+  - file: ${loading_illustration_file}
+    id: state_loading
+    resize: 240x240
+    type: RGB
+    transparency: alpha_channel
+  - file: ${network_connecting_file}
+    id: state_network_connecting
+    resize: 240x240
+    type: RGB
+    transparency: alpha_channel
+  - file: ${ha_connecting_file}
+    id: state_ha_connecting
+    resize: 240x240
+    type: RGB
+    transparency: alpha_channel
+
+spi:
+  clk_pin: GPIO17
+  mosi_pin: GPIO21
+
+output:
+  - platform: ledc
+    pin: GPIO16
+    id: gpio16
+
+display:
+  - platform: mipi_spi
+    id: lcd
+    model: CUSTOM
+    bus_mode: single
+    dc_pin: GPIO14
+    cs_pin: GPIO15
+    color_order: rgb
+    dimensions:
+      height: 240
+      width: 240
+      offset_width: 0
+      offset_height: 0
+    invert_colors: true
+    transform:
+      swap_xy: false
+      mirror_x: false
+      mirror_y: false
+    spi_mode: MODE0
+    init_sequence:
+    pages:
+      - id: network_connecting_page
+        lambda: |-
+          it.fill(Color::WHITE);
+          it.image((it.get_width() / 2), (it.get_height() / 2), id(state_network_connecting), ImageAlign::CENTER);
+      - id: error_page
+        lambda: |-
+          it.fill(Color::WHITE);
+          it.image((it.get_width() / 2), (it.get_height() / 2), id(state_error), ImageAlign::CENTER);
+      - id: idle_page
+        lambda: |-
+          it.fill(Color::WHITE);
+          it.image((it.get_width() / 2), (it.get_height() / 2), id(state_idle), ImageAlign::CENTER);
+      - id: state_listening_page
+        lambda: |-
+          it.fill(Color::WHITE);
+          it.image((it.get_width() / 2), (it.get_height() / 2), id(state_listening), ImageAlign::CENTER);
+      - id: state_thinking_page
+        lambda: |-
+          it.fill(Color::WHITE);
+          it.image((it.get_width() / 2), (it.get_height() / 2), id(state_thinking), ImageAlign::CENTER);
+      - id: state_replying_page
+        lambda: |-
+          it.fill(Color::WHITE);
+          it.image((it.get_width() / 2), (it.get_height() / 2), id(state_replying), ImageAlign::CENTER);
+      - id: state_loading_page
+        lambda: |-
+          it.fill(Color::WHITE);
+          it.image((it.get_width() / 2), (it.get_height() / 2), id(state_loading), ImageAlign::CENTER);
+      - id: ha_connecting_page
+        lambda: |-
+          it.fill(Color::WHITE);
+          it.image((it.get_width() / 2), (it.get_height() / 2), id(state_ha_connecting), ImageAlign::CENTER);
+
+select:
+  - platform: template
+    entity_category: config
+    name: Wake word engine location
+    id: wake_word_engine_location
+    optimistic: true
+    restore_value: true
+    options:
+      - In Home Assistant
+      - On device
+    initial_option: On device
+    on_value:
+      - if:
+          condition:
+            lambda: return x == "In Home Assistant";
+          then:
+            - micro_wake_word.stop:
+            - delay: 500ms
+            - lambda: id(va).set_use_wake_word(true);
+            - voice_assistant.start_continuous:
+      - if:
+          condition:
+            lambda: return x == "On device";
+          then:
+            - lambda: id(va).set_use_wake_word(false);
+            - voice_assistant.stop:
+            - delay: 500ms
+            - micro_wake_word.start:
+
+script:
+  - id: start_wake_word
+    then:
+      - if:
+          condition:
+            and:
+              - not:
+                  - voice_assistant.is_running:
+              - lambda: |-
+                  return id(wake_word_engine_location).current_option() == "On device";
+          then:
+            - lambda: id(va).set_use_wake_word(false);
+            - micro_wake_word.start:
+      - if:
+          condition:
+            and:
+              - not:
+                  - voice_assistant.is_running:
+              - lambda: |-
+                  return id(wake_word_engine_location).current_option() == "In Home Assistant";
+          then:
+            - lambda: id(va).set_use_wake_word(true);
+            - voice_assistant.start_continuous:
+  - id: stop_wake_word
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(wake_word_engine_location).current_option() == "In Home Assistant";
+          then:
+            - lambda: id(va).set_use_wake_word(false);
+            - voice_assistant.stop:
+      - if:
+          condition:
+            lambda: |-
+              return id(wake_word_engine_location).current_option() == "On device";
+          then:
+            - micro_wake_word.stop:
