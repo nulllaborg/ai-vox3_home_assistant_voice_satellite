@@ -123,7 +123,7 @@ AI-VOX3 requires a **2.4GHz** Wi-Fi network. (Its Wi-Fi chip does not support 5G
 #### Connect the Hardware
 
 1. Connect the AI-VOX3 device to your computer using a USB Type-C cable.
-2. Click the power button on the AI-VOX3 board to start the device.
+2. Press the power button on the AI-VOX3 board to start the device. **This will power it on and make it discoverable as a serial port on your computer**.
 
 #### Compile and Upload the Firmware
 
