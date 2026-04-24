@@ -177,6 +177,7 @@ microphone:
     i2s_din_pin: GPIO9
     correct_dc_offset: true
     pdm: false
+    use_apll: true
 
 micro_wake_word:
   id: mww
