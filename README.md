@@ -64,6 +64,15 @@ You need to prepare two core configuration files:
 1. [config.yaml](config.yaml): This is the main configuration file for device functionality. We have prepared it for you, and you can use it directly.
 2. `secrets.yaml`: This is your private configuration file for storing sensitive information like Wi-Fi name and password. **You need to create and fill in this file according to your network situation**.
 
+    `secrets.yaml` file content example:
+
+    ```yaml
+    ---
+    # Replace the content inside quotes with your actual information
+    wifi_ssid: "Your wifi ssid"
+    wifi_password: "Your wifi password"
+    ```
+
 **How it works**: During compilation, ESPHome first reads `config.yaml`, then automatically replaces the `!secret` variables within it with the corresponding values defined in `secrets.yaml`, thereby generating the complete firmware containing your personal information.
 
 ## Firmware Deployment
@@ -109,14 +118,7 @@ The following is the complete process for deployment using the ESPHome command-l
 AI-VOX3 requires a **2.4GHz** Wi-Fi network. (Its Wi-Fi chip does not support 5GHz bands.)
 
 1. In the directory containing the `config.yaml` file, create a new file named `secrets.yaml`.
-2. Open the `secrets.yaml` file with a text editor and fill in your Wi-Fi information in the following format:
-
-    ```yaml
-    ---
-    # Replace the content inside quotes with your actual information
-    wifi_ssid: "Your wifi ssid"
-    wifi_password: "Your wifi password"
-    ```
+2. Open the `secrets.yaml` file with a text editor and fill in your Wi-Fi information. **Please see the [Configuration Files](#configuration-files) section for the correct format and a complete example.**
 
 *Note: Please ensure your Wi-Fi is on the 2.4GHz band.*
 
@@ -153,16 +155,7 @@ At this point, the device-side firmware deployment for AI-VOX3 is complete. Next
 
 ### Graphical Interface Deployment
 
-This method provides a graphical interface through the official Home Assistant add-on. Please refer to the [Official Guide](https://esphome.io/guides/getting_started_hassio/) to install the add-on, then import our provided [config.yaml](config.yaml) configuration file in the add-on interface (either by uploading the file or copying and pasting the content), and **create a new `secrets.yaml` file to fill in your Wi-Fi information**. Subsequent compilation and deployment steps should be followed as guided by the ESPHome add-on. This guide aims to provide configuration files adapted for AI-VOX3; detailed operations for the graphical interface are not covered here, please refer to the official documentation.
-
-`secrets.yaml` **File Content Example**:
-
-```yaml
----
-# Replace the content inside quotes with your actual information
-wifi_ssid: "Your wifi ssid"
-wifi_password: "Your wifi password"
-```
+This method provides a graphical interface through the official Home Assistant add-on. Please refer to the [Official Guide](https://esphome.io/guides/getting_started_hassio/) to install the add-on, then import our provided [config.yaml](config.yaml) configuration file in the add-on interface (either by uploading the file or copying and pasting the content), and **create a new `secrets.yaml` file to fill in your Wi-Fi information**. **Please see the [Configuration Files](#configuration-files) section for the correct format and a complete example**. Subsequent compilation and deployment steps should be followed as guided by the ESPHome add-on. This guide aims to provide configuration files adapted for AI-VOX3; detailed operations for the graphical interface are not covered here, please refer to the official documentation.
 
 ---
 
@@ -188,8 +181,11 @@ Follow these steps to integrate the AI-VOX3 device into your Home Assistant:
     - Usually, you just need to click "Submit" in the confirmation window that appears.
     - Next, the system may prompt you to select a "Zone" for this device. You can choose a suitable zone or simply click the "Skip and finish" button.
 3. Connecting to Voice Assistant
+
     After successfully adding the device, its indicator should enter the **White Blinking** state. This means the device is connected to Home Assistant's core system but is not yet bound to the voice assistant.
+
 4. Completing the Connection
+
     If you have already configured the Voice Assistant pipeline in Home Assistant, AI-VOX3 will automatically connect to the voice assistant function. Once the connection is successful, the device indicator will change to **White Solid**, meaning your AI-VOX3 voice satellite is fully ready to start working.
 
 ## Configure Assist​
@@ -205,7 +201,9 @@ For users who want to verify device functionality as quickly as possible, we rec
 Here are the key steps and considerations based on the official guide:
 
 1. Enable Home Assistant Cloud
-    If you haven't already, set up and connect Home Assistant Cloud in the Home Assistant "Configuration".
+
+    - If you haven't already, set up and connect Home Assistant Cloud in the Home Assistant "Configuration".
+
 2. Create or Edit a Voice Assistant
     - Go to "Settings" → "Voice Assistant", create a new assistant, or edit an existing one.
     - In the pipeline configuration, make the following settings:
